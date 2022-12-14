@@ -31,7 +31,7 @@ class Decoder(nn.Module):
     def __init__(self, d, f):
         super(Decoder, self).__init__()
 
-        self.attention_block = Attention(f)
+        self.attention_block = Attention(d, f)
         self.feedforward_block = FeedForward(d, f)
         self.residuals = []  # TODO the residuals are just the value before the previous block
 
@@ -49,14 +49,14 @@ class Decoder(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, f):
+    def __init__(self,d, f):
         super(Attention, self).__init__()
 
-        self.f = f  # needed for the normalization of the filter. todo can we remove this?
-        self.wq = []  # size is (d,f) bc we project d into f
-        self.wk = []
-        self.wv = []
-        self.attention_filter = []
+        self.f = f  # needed for the normalization of the filter. todo I think I can remove this. see compute filter
+        self.wq = nn.Linear(d, f)  # size is (d,f) bc we project d into f
+        self.wk = nn.Linear(d, f)
+        self.wv = nn.Linear(d, f)
+        self.attention_filter = torch.Tensor()  # I don't think I need to define this ahead of time or as parameters
 
     def forward(self, x):
         q,k,v = self.comptue_qkv(x)
@@ -68,29 +68,29 @@ class Attention(nn.Module):
         return x
 
     def comptue_qkv(self, x):
-        q = np.matmul(x, self.wq)  # (l,f); l for each word, f projection
-        k = np.matmul(x, self.wk)
-        v = np.matmul(x, self.wv)
+        q = self.wq(x)  # (l,f); l for each word, f projection
+        k = self.wk(x)
+        v = self.wv(x)
         return q,k,v
 
     def compute_attention_filter(self, q, k):
-        self.attention_filter = np.matmul(q, k.T) / np.sqrt(self.f)
+        self.attention_filter = torch.matmul(q, k.T) / np.sqrt(self.f)  # todo I should be able to replace f with q.shape[1]
 
     def mask_attention_filter(self):
-        mask = np.zeros_like(self.attention_filter)
-        indices = np.triu_indices(self.attention_filter.shape[0], 1)
-        mask[indices] = -np.inf
+        mask = torch.zeros_like(self.attention_filter)
+        indices = torch.triu_indices(self.attention_filter.shape[0], 1)
+        mask[indices] = torch.Tensor(-np.inf)
         self.attention_filter = self.attention_filter + mask
 
     def softmax_attention_filter(self):
-        self.attention_filter = torch.Tensor.numpy(softmax(torch.from_numpy(self.attention_filter)))
+        self.attention_filter = softmax(self.attention_filter)
 
     def apply_attention_filter(self, v):
-        return np.matmul(self.attention_filter, v)  # lxf
+        return torch.matmul(self.attention_filter, v)  # lxf
 
     def projection_layer(self, x):
-        proj_z = np.ones((self.f, self.f))  # fxd
-        x = np.matmul(x, proj_z)  # lxd - projects z back to the original embedding depth d
+        proj_z = nn.Linear(self.f, self.f)  # fxf todo maybe it's supposed to be fxd. not sure
+        x = proj_z(x)  # lxf
         return x
 
 
@@ -102,8 +102,8 @@ class FeedForward(nn.Module):
         self.layer2 = nn.Linear(f*4, d)  # Just projects back to the original depth d
 
     def forward(self, x):
-        x = np.matmul(x, self.layer1)
-        x = np.matmul(x, self.layer2)
+        x = self.layer1(x)
+        x = self.layer2(x)
         return x
 
 
