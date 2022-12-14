@@ -6,28 +6,53 @@ from torch.nn.functional import softmax
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
-    def __init__(self, num_decoders):
+    def __init__(self, num_decoders, d, f):
         super(GPTAve, self).__init__()
 
         self.num_decoders = num_decoders
+        self.d = d  # The original depth of the embedding for each token.
+        self.f = f  # The depth of each token after being projected during attention. Usually just d or smaller.
+        self.heads = 1
+        self.f /= self.heads  # split the projection into each head
+        self.model = self.build_model()
+
+    def forward(self, x):
+        for decoder in self.model:
+            x = decoder(x)
+
+    def build_model(self):
+        model = []
+        for n in range(self.num_decoders):
+            model.append(Decoder(self.d, self.f))
+        return model
 
 
-class Decoder:
-    def __init__(self):
-        pass
+class Decoder(nn.Module):
+    def __init__(self, d, f):
+        super(Decoder, self).__init__()
 
-    def projection_layer(self):
-        proj_z = np.ones((self.f, self.f))  # fxd
-        self.z = np.matmul(self.z, proj_z)  # lxd - projects z back to the original embedding size d
+        self.attention_block = Attention(f)
+        self.feedforward_block = FeedForward(d, f)
+        self.residuals = []  # TODO the residuals are just the value before the previous block
+
+    def forward(self, x):
+        x = self.attention_block(x)
+        x = self.layer_normalization(x + self.residuals)
+        x = self.feedforward_block(x)
+        x = self.layer_normalization(x + self.residuals)
+        return x
+
+    # TODO Define this
+    @staticmethod
+    def layer_normalization(x):
+        return x
 
 
 class Attention(nn.Module):
-    def __init__(self):
+    def __init__(self, f):
         super(Attention, self).__init__()
 
-        self.heads = 1
-        self.f = 756  # what we project x to. length of q,v,k. usually d or smaller
-        self.f /= self.heads  # split the projection into each head
+        self.f = f  # needed for the normalization of the filter. todo can we remove this?
         self.wq = []  # size is (d,f) bc we project d into f
         self.wk = []
         self.wv = []
@@ -39,6 +64,7 @@ class Attention(nn.Module):
         self.mask_attention_filter()
         self.softmax_attention_filter()
         x = self.apply_attention_filter(v)
+        x = self.project_filtered_values(x)
         return x
 
     def comptue_qkv(self, x):
@@ -62,13 +88,16 @@ class Attention(nn.Module):
     def apply_attention_filter(self, v):
         return np.matmul(self.attention_filter, v)  # lxf
 
+    def projection_layer(self, x):
+        proj_z = np.ones((self.f, self.f))  # fxd
+        x = np.matmul(x, proj_z)  # lxd - projects z back to the original embedding depth d
+        return x
+
 
 class FeedForward(nn.Module):
     def __init__(self, d, f):
         super(FeedForward, self).__init__()
 
-        self.d = d  # The original depth of the embedding for each token.
-        self.f = f  # The depth of each token after being projected during attention. Usually just d or smaller.
         self.layer1 = nn.Linear(f, f*4)  # first layer is 4x the size of the output of the attention block so f*4
         self.layer2 = nn.Linear(f*4, d)  # Just projects back to the original depth d
 
