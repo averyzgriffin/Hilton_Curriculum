@@ -38,20 +38,18 @@ class Decoder(nn.Module):
     def __init__(self, d, f):
         super(Decoder, self).__init__()
 
-        self.attention_block = Attention(d, f)
-        self.feedforward_block = FeedForward(d, f)
+        self.l = 1  # TODO I have no idea how to get l in here since it changes each batch. But maybe I don't need it
+        self.attention_block = Attention(d, f)  # result is lxf
+        self.feedforward_block = FeedForward(d, f)  # result is lxd I think
+        self.LayerNorm1 = nn.LayerNorm(f)  # TODO I might need l here
+        self.LayerNorm2 = nn.LayerNorm(d)
         self.residuals = []  # TODO the residuals are just the value before the previous block
 
     def forward(self, x):
         x = self.attention_block(x)
-        x = self.layer_normalization(x + self.residuals)
+        x = self.LayerNorm1(x) # + self.residuals)
         x = self.feedforward_block(x)
-        x = self.layer_normalization(x + self.residuals)
-        return x
-
-    # TODO Define this
-    @staticmethod
-    def layer_normalization(x):
+        x = self.LayerNorm2(x) # + self.residuals)
         return x
 
 
