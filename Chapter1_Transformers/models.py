@@ -43,13 +43,14 @@ class Decoder(nn.Module):
         self.feedforward_block = FeedForward(d, f)  # result is lxd I think
         self.LayerNorm1 = nn.LayerNorm(f)  # TODO I might need l here
         self.LayerNorm2 = nn.LayerNorm(d)
-        self.residuals = []  # TODO the residuals are just the value before the previous block
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
+        residuals = x.detach().clone()
         x = self.attention_block(x)
-        x = self.LayerNorm1(x) # + self.residuals)
+        x = self.LayerNorm1(x + residuals)
+        residuals = x.detach().clone()
         x = self.feedforward_block(x)
-        x = self.LayerNorm2(x) # + self.residuals)
+        x = self.LayerNorm2(x + residuals)
         return x
 
 
