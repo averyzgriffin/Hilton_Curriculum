@@ -13,12 +13,13 @@ class GPTAve(nn.Module):
         self.d = d  # The original depth of the embedding for each token.
         self.f = f  # The depth of each token after being projected during attention. Usually just d or smaller.
         self.heads = 1
-        self.f /= self.heads  # split the projection into each head
+        self.f = int(self.f / self.heads)  # split the projection into each head
         self.model = self.build_model()
 
     def forward(self, x):
         for decoder in self.model:
             x = decoder(x)
+        return x
 
     def build_model(self):
         model = []
@@ -49,7 +50,7 @@ class Decoder(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self,d, f):
+    def __init__(self, d, f):
         super(Attention, self).__init__()
 
         self.f = f  # needed for the normalization of the filter. todo I think I can remove this. see compute filter
@@ -59,15 +60,15 @@ class Attention(nn.Module):
         self.attention_filter = torch.Tensor()  # I don't think I need to define this ahead of time or as parameters
 
     def forward(self, x):
-        q,k,v = self.comptue_qkv(x)
+        q,k,v = self.compute_qkv(x)
         self.compute_attention_filter(q, k)
         self.mask_attention_filter()
         self.softmax_attention_filter()
         x = self.apply_attention_filter(v)
-        x = self.project_filtered_values(x)
+        x = self.projection_layer(x)
         return x
 
-    def comptue_qkv(self, x):
+    def compute_qkv(self, x):
         q = self.wq(x)  # (l,f); l for each word, f projection
         k = self.wk(x)
         v = self.wv(x)
@@ -79,7 +80,7 @@ class Attention(nn.Module):
     def mask_attention_filter(self):
         mask = torch.zeros_like(self.attention_filter)
         indices = torch.triu_indices(self.attention_filter.shape[0], 1)
-        mask[indices] = torch.Tensor(-np.inf)
+        mask[indices] = -np.inf
         self.attention_filter = self.attention_filter + mask
 
     def softmax_attention_filter(self):
@@ -89,7 +90,7 @@ class Attention(nn.Module):
         return torch.matmul(self.attention_filter, v)  # lxf
 
     def projection_layer(self, x):
-        proj_z = nn.Linear(self.f, self.f)  # fxf todo maybe it's supposed to be fxd. not sure
+        proj_z = nn.Linear(self.f, self.f)  # fxf (maybe it's supposed to be fxd. not sure)
         x = proj_z(x)  # lxf
         return x
 
