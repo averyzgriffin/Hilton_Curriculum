@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class Transformer:
+"""class Transformer:
 
 	def __init__():
 
@@ -36,7 +36,7 @@ class Transformer:
 
 		# Final Prediction
 		predictions = softmax(linear(decoder_output))  # k x 1 vector, k = # of words in the model vocabulary
-
+"""
 
 
 

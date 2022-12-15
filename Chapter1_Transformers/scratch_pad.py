@@ -22,6 +22,13 @@ def get_embedding_matrix(vocab_dict, embedding_dict, dims):
     return embedding_matrix
 
 
+def create_embedding_tensor(embedding):
+    embedding_tensor = torch.nn.Embedding(num_embeddings=len(embedding), embedding_dim=len(embedding[0]))
+    embedding_tensor.weight = torch.nn.Parameter(torch.tensor(embedding,dtype=torch.float32))
+    embedding_tensor.weight.requires_grad = False
+    return embedding_tensor
+
+
 # Large Corpus
 # with open("corpuses/raw_text.txt") as f:
 #     corpus = f.read().lower()
@@ -46,13 +53,13 @@ data = pipe(corpus)
 # glove_embedding = {key: val.values for key, val in glove.T.items()}
 # vocab_index = dict([(y,x+1) for x,y in enumerate(sorted(set(tokens)))])
 
-# embedding_matrix = get_embedding_matrix(vocab_index, glove_embedding, 50)
-# pos_matrix = getPositionEncoding(embedding_matrix.shape[0], embedding_matrix.shape[1])
-# embedding_matrix += pos_matrix
+embedding_matrix = get_embedding_matrix(vocab_index, glove_embedding, 50)
+pos_matrix = getPositionEncoding(embedding_matrix.shape[0], embedding_matrix.shape[1])
+embedding_matrix += pos_matrix
 
-# embedding_tensor = torch.nn.Embedding(num_embeddings=len(vocab_index), embedding_dim=50)
-# embedding_tensor.weight = torch.nn.Parameter(torch.tensor(embedding_matrix,dtype=torch.float32))
-# embedding_tensor.weight.requires_grad = False
+embedding_tensor = torch.nn.Embedding(num_embeddings=len(vocab_index), embedding_dim=50)
+embedding_tensor.weight = torch.nn.Parameter(torch.tensor(embedding_matrix,dtype=torch.float32))
+embedding_tensor.weight.requires_grad = False
 
 
 
