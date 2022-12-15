@@ -15,10 +15,12 @@ class GPTAve(nn.Module):
         self.heads = 1
         self.f = int(self.f / self.heads)  # split the projection into each head
         self.model = self.build_model()
+        self.final_linear = nn.Linear(self.d, vocab_size)
 
     def forward(self, x):
         for decoder in self.model:
             x = decoder(x)
+        x = self.final_layer(x)
         return x
 
     def build_model(self):
@@ -26,6 +28,10 @@ class GPTAve(nn.Module):
         for n in range(self.num_decoders):
             model.append(Decoder(self.d, self.f))
         return model
+
+    def final_layer(self, x):
+        x = self.final_linear(x)
+        return softmax(x)
 
 
 class Decoder(nn.Module):
