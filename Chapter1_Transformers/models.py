@@ -6,7 +6,7 @@ from torch.nn.functional import softmax
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
-    def __init__(self, num_decoders, d, f):
+    def __init__(self, num_decoders, d, f, vocab_size):
         super(GPTAve, self).__init__()
 
         self.num_decoders = num_decoders
@@ -58,12 +58,11 @@ class Attention(nn.Module):
     def __init__(self, d, f):
         super(Attention, self).__init__()
 
-        self.f = f  # needed for the normalization of the filter. todo I think I can remove this. see compute filter
         self.wq = nn.Linear(d, f)  # size is (d,f) bc we project d into f
         self.wk = nn.Linear(d, f)
         self.wv = nn.Linear(d, f)
         self.attention_filter = torch.Tensor()  # I don't think I need to define this ahead of time or as parameters
-        self.proj_z = nn.Linear(self.f, self.f)  # fxf (maybe it's supposed to be fxd. not sure)
+        self.proj_z = nn.Linear(f, f)  # fxf (maybe it's supposed to be fxd. not sure)
 
     def forward(self, x):
         q,k,v = self.compute_qkv(x)
@@ -81,7 +80,7 @@ class Attention(nn.Module):
         return q,k,v
 
     def compute_attention_filter(self, q, k):
-        self.attention_filter = torch.matmul(q, k.T) / np.sqrt(self.f)  # todo I should be able to replace f with q.shape[1]
+        self.attention_filter = torch.matmul(q, k.T) / np.sqrt(q.shape[1])
 
     def mask_attention_filter(self):
         mask = torch.zeros_like(self.attention_filter)
