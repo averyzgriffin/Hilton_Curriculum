@@ -31,7 +31,7 @@ class GPTAve(nn.Module):
 
     def final_layer(self, x):
         x = self.final_linear(x)
-        return softmax(x)
+        return softmax(x, dim=1)
 
 
 class Decoder(nn.Module):
@@ -90,7 +90,7 @@ class Attention(nn.Module):
         self.attention_filter = self.attention_filter + mask
 
     def softmax_attention_filter(self):
-        self.attention_filter = softmax(self.attention_filter)
+        self.attention_filter = softmax(self.attention_filter, dim=1)
 
     def apply_attention_filter(self, v):
         return torch.matmul(self.attention_filter, v)  # lxf
