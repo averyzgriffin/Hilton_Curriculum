@@ -24,7 +24,7 @@ class GPTAve(nn.Module):
         return x
 
     def build_model(self):
-        model = []
+        model = torch.nn.ModuleList()
         for n in range(self.num_decoders):
             model.append(Decoder(self.d, self.f))
         return model
