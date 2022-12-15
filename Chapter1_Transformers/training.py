@@ -44,8 +44,8 @@ def compute_loss(x):
 train = WikiText2(split='train')
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
-embedding_model = AutoModel.from_pretrained("gpt2")
 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+embedding_model = AutoModel.from_pretrained("gpt2")
 embedding_model.resize_token_embeddings(len(tokenizer))
 pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer)
 
@@ -53,6 +53,7 @@ model = GPTAve(num_decoders=1, d=embedding_model.embed_dim, f=embedding_model.em
 loss_fc = torch.nn.CrossEntropyLoss()
 opt = torch.optim.Adam(lr=1e-3, params=model.parameters())
 
+s = 0
 for text in train:
     x = preprocess_text(text, pipe)
     y = get_label(text, tokenizer)
@@ -62,22 +63,8 @@ for text in train:
     loss = loss_fc(logits, y)
     loss.backward()  # compute gradients
     opt.step()  # update weights
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    print(f"Step {s} Loss {loss}")
+    s += 1
 
 
 
