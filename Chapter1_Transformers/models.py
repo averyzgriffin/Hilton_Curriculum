@@ -62,6 +62,7 @@ class Attention(nn.Module):
         self.wk = nn.Linear(d, f)
         self.wv = nn.Linear(d, f)
         self.attention_filter = torch.Tensor()  # I don't think I need to define this ahead of time or as parameters
+        self.proj_z = nn.Linear(self.f, self.f)  # fxf (maybe it's supposed to be fxd. not sure)
 
     def forward(self, x):
         q,k,v = self.compute_qkv(x)
@@ -94,8 +95,7 @@ class Attention(nn.Module):
         return torch.matmul(self.attention_filter, v)  # lxf
 
     def projection_layer(self, x):
-        proj_z = nn.Linear(self.f, self.f)  # fxf (maybe it's supposed to be fxd. not sure)
-        x = proj_z(x)  # lxf
+        x = self.proj_z(x)  # lxf
         return x
 
 
