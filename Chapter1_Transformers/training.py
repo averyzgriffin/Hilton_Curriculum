@@ -22,9 +22,10 @@ def get_label(text, tokenizer, max_sequence):
 device = torch.device("cuda:0")
 
 train = WikiText2(split='train')
-max_sequence = 256
+
+max_sequence = 512
 tokenizer = AutoTokenizer.from_pretrained("gpt2", model_max_length=max_sequence)
-tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+tokenizer.add_special_tokens({'pad_token': '[PAD]'})  # TODO pretty sure this isn't doing anything useful
 embedding_model = AutoModel.from_pretrained("gpt2")
 embedding_model.resize_token_embeddings(len(tokenizer))
 pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer, padding=True, truncation=True)
