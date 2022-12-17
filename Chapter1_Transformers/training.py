@@ -15,7 +15,8 @@ def preprocess_text(text, token_pipe: pipeline, pos_matrix):
 
 def get_label(text, tokenizer, max_sequence):
     token_id = torch.tensor(tokenizer.encode(text, max_length=max_sequence, truncation=True)[1:])
-    return torch.nn.functional.one_hot(token_id, tokenizer.vocab_size).float()
+    return token_id
+    # return torch.nn.functional.one_hot(token_id, tokenizer.vocab_size).float()
 
 
 device = torch.device("cuda:0")
