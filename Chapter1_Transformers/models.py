@@ -6,14 +6,13 @@ from torch.nn.functional import softmax
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
-    def __init__(self, num_decoders, d, f, vocab_size):
+    def __init__(self, num_decoders, d, f, heads, vocab_size):
         super(GPTAve, self).__init__()
 
         self.num_decoders = num_decoders
         self.d = d  # The original depth of the embedding for each token.
         self.f = f  # The depth of each token after being projected during attention. Usually just d or smaller.
-        self.heads = 1
-        self.f = int(self.f / self.heads)  # split the projection into each head
+        self.heads = heads
         self.model = self.build_model()
         self.final_linear = nn.Linear(self.d, vocab_size)
 
@@ -26,7 +25,7 @@ class GPTAve(nn.Module):
     def build_model(self):
         model = torch.nn.ModuleList()
         for n in range(self.num_decoders):
-            model.append(Decoder(self.d, self.f))
+            model.append(Decoder(self.d, self.f, self.heads))
         return model
 
     def final_layer(self, x):
@@ -35,11 +34,10 @@ class GPTAve(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, d, f):
+    def __init__(self, d, f, heads):
         super(Decoder, self).__init__()
 
-        self.l = 1  # TODO I have no idea how to get l in here since it changes each batch. But maybe I don't need it
-        self.attention_block = Attention(d, f)  # result is lxf
+        self.attention_block = Attention(d, f, heads)  # result is lxf
         self.feedforward_block = FeedForward(d, f)  # result is lxd I think
         self.LayerNorm1 = nn.LayerNorm(f)  # TODO I might need l here
         self.LayerNorm2 = nn.LayerNorm(d)
@@ -55,21 +53,24 @@ class Decoder(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, d, f):
+    def __init__(self, d, f, heads):
         super(Attention, self).__init__()
 
         self.wq = nn.Linear(d, f)  # size is (d,f) bc we project d into f
         self.wk = nn.Linear(d, f)
         self.wv = nn.Linear(d, f)
-        self.attention_filter = torch.Tensor()  # I don't think I need to define this ahead of time or as parameters
+        self.heads = heads
+        self.attention_filter = torch.Tensor()  # TODO I think I may need to explicitely say gradient=False to avoid treating these as parameters / not define it ahead of time
         self.proj_z = nn.Linear(f, f)  # fxf (maybe it's supposed to be fxd. not sure)
 
     def forward(self, x):
         q,k,v = self.compute_qkv(x)
+        q,k,v = self.split_heads(q, k, v)
         self.compute_attention_filter(q, k)
         self.mask_attention_filter()
         self.softmax_attention_filter()
         x = self.apply_attention_filter(v)
+        x = self.concatenate_heads(x)
         x = self.projection_layer(x)
         return x
 
@@ -79,20 +80,30 @@ class Attention(nn.Module):
         v = self.wv(x)
         return q,k,v
 
+    def split_heads(self, q, k, v):
+        q = torch.stack(torch.split(q, (q.shape[1]//self.heads), dim=1), dim=0)
+        k = torch.stack(torch.split(k, (k.shape[1]//self.heads), dim=1), dim=0)
+        v = torch.stack(torch.split(v, (v.shape[1]//self.heads), dim=1), dim=0)
+        return q,k,v
+
     def compute_attention_filter(self, q, k):
-        self.attention_filter = torch.matmul(q, k.T) / np.sqrt(q.shape[1])
+        self.attention_filter = torch.bmm(q, torch.permute(k, (0, 2, 1)))
 
     def mask_attention_filter(self):
         mask = torch.zeros_like(self.attention_filter)
-        indices = torch.triu_indices(self.attention_filter.shape[0], 1)
-        mask[indices] = -np.inf
+        indices = torch.triu_indices(self.attention_filter.shape[0], self.attention_filter.shape[1], offset=1)
+        mask[:, indices[0], indices[1]] = -1000000000
         self.attention_filter = self.attention_filter + mask
 
     def softmax_attention_filter(self):
-        self.attention_filter = softmax(self.attention_filter, dim=1)
+        self.attention_filter = softmax(self.attention_filter, dim=2)
 
     def apply_attention_filter(self, v):
-        return torch.matmul(self.attention_filter, v)  # lxf
+        return torch.bmm(self.attention_filter, v)  # hxlxf
+
+    @staticmethod
+    def concatenate_heads(x):
+        return x.transpose(0,1).reshape(x.shape[1], x.shape[0]*x.shape[2])  # reshapes hxlx(f/h) into lxf)
 
     def projection_layer(self, x):
         x = self.proj_z(x)  # lxf
