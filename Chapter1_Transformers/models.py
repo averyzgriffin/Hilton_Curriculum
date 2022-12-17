@@ -15,7 +15,6 @@ class GPTAve(nn.Module):
         self.heads = heads
         self.embedding_matrix = embedding_matrix
         self.model = self.build_model()
-        self.final_linear = nn.Linear(self.d, vocab_size)
 
     def forward(self, x):
         for decoder in self.model:
@@ -117,9 +116,11 @@ class FeedForward(nn.Module):
 
         self.layer1 = nn.Linear(f, f*4)  # first layer is 4x the size of the output of the attention block so f*4
         self.layer2 = nn.Linear(f*4, d)  # Just projects back to the original depth d
+        self.activation = nn.ReLU()
 
     def forward(self, x):
         x = self.layer1(x)
+        x = self.activation(x)  # TODO I was missing this
         x = self.layer2(x)
         return x
 
