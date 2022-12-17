@@ -6,11 +6,11 @@ from pos_encode import getPositionEncoding
 from models import GPTAve
 
 
-def preprocess_text(text, token_pipe: pipeline):
+def preprocess_text(text, token_pipe: pipeline, pos_matrix):
     x = token_pipe(text)[0]
-    pos_matrix = getPositionEncoding(len(x), len(x[0]))  # Todo concerned about samples of different sizes
-    # x = create_embedding_tensor(text)  # I don't think we need this anymore but just in case
-    return torch.Tensor(x[:-1] + pos_matrix[:-1])
+    # pos_matrix = getPositionEncoding(max_len, len(x[0]))
+    x = x + pos_matrix[:len(x)]
+    return torch.Tensor(x[:-1])  # TODO I am concerned about ignoring the last input
 
 
 def get_label(text, tokenizer, max_sequence):
@@ -28,14 +28,17 @@ embedding_model = AutoModel.from_pretrained("gpt2")
 embedding_model.resize_token_embeddings(len(tokenizer))
 pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer, padding=True, truncation=True)
 
-model = GPTAve(num_decoders=1, d=embedding_model.embed_dim, f=embedding_model.embed_dim, heads=12, vocab_size=tokenizer.vocab_size).to(device)
+pos_matrix = getPositionEncoding(max_sequence, embedding_model.embed_dim)  # we are just computing this once now
+
+model = GPTAve(num_decoders=3, d=embedding_model.embed_dim, f=embedding_model.embed_dim,
+               heads=12, embedding_matrix=embedding_matrix).to(device)
 print(model)
 loss_fc = torch.nn.CrossEntropyLoss()
 opt = torch.optim.Adam(lr=1e-5, params=model.parameters())
 
 s = 0
 for text in train:
-    x = preprocess_text(text, pipe).to(device)
+    x = preprocess_text(text, pipe, pos_matrix).to(device)
     if len(x) > 1:
         y = get_label(text, tokenizer, max_sequence).to(device)
         opt.zero_grad()  # clears gradients
