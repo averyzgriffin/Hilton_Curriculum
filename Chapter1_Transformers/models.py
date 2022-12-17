@@ -6,20 +6,21 @@ from torch.nn.functional import softmax
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
-    def __init__(self, num_decoders, d, f, heads, vocab_size):
+    def __init__(self, num_decoders, d, f, heads, embedding_matrix):
         super(GPTAve, self).__init__()
 
         self.num_decoders = num_decoders
         self.d = d  # The original depth of the embedding for each token.
         self.f = f  # The depth of each token after being projected during attention. Usually just d or smaller.
         self.heads = heads
+        self.embedding_matrix = embedding_matrix
         self.model = self.build_model()
         self.final_linear = nn.Linear(self.d, vocab_size)
 
     def forward(self, x):
         for decoder in self.model:
             x = decoder(x)
-        x = self.final_layer(x)
+        x = self.compute_logits(x)
         return x
 
     def build_model(self):
@@ -28,8 +29,8 @@ class GPTAve(nn.Module):
             model.append(Decoder(self.d, self.f, self.heads))
         return model
 
-    def final_layer(self, x):
-        x = self.final_linear(x)
+    def compute_logits(self, x):
+        x = torch.matmul(x, self.embedding_matrix.T)
         return softmax(x, dim=1)
 
 

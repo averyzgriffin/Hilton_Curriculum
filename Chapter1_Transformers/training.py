@@ -27,8 +27,10 @@ max_sequence = 512
 tokenizer = AutoTokenizer.from_pretrained("gpt2", model_max_length=max_sequence)
 tokenizer.add_special_tokens({'pad_token': '[PAD]'})  # TODO pretty sure this isn't doing anything useful
 embedding_model = AutoModel.from_pretrained("gpt2")
-embedding_model.resize_token_embeddings(len(tokenizer))
-pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer, padding=True, truncation=True)
+embedding_model.resize_token_embeddings(len(tokenizer))  # TODO pretty sure this isn't doing anything useful
+embedding_matrix = torch.tensor(embedding_model.wte.weight).to(device)
+pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer,
+                padding=True, truncation=True)
 
 pos_matrix = getPositionEncoding(max_sequence, embedding_model.embed_dim)  # we are just computing this once now
 
