@@ -116,7 +116,7 @@ class FeedForward(nn.Module):
 
         self.layer1 = nn.Linear(f, f*4)  # first layer is 4x the size of the output of the attention block so f*4
         self.layer2 = nn.Linear(f*4, d)  # Just projects back to the original depth d
-        self.activation = nn.ReLU()
+        self.activation = nn.GELU()
 
     def forward(self, x):
         x = self.layer1(x)
