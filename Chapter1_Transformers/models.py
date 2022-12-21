@@ -14,7 +14,7 @@ def compute_similarity(array: torch.Tensor):
     mean = np.mean(similarity)
     low = np.min(similarity)
     high = np.max(similarity)
-    return (mean, low, high)
+    return mean, low, high
 
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
