@@ -1,3 +1,4 @@
+import random
 import torch
 from torchtext.datasets import WikiText2
 from transformers import AutoTokenizer, AutoModel, pipeline, GPT2TokenizerFast
