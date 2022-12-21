@@ -4,6 +4,19 @@ import numpy as np
 from torch.nn.functional import softmax
 
 
+def compute_similarity(array: torch.Tensor):
+    cos = nn.CosineSimilarity(dim=0)
+    similarity = []
+    for x in range(len(array)):
+        for y in range(len(array)):
+            if x != y:
+                similarity.append(cos(array[x], array[y]).cpu().detach())
+    mean = np.mean(similarity)
+    low = np.min(similarity)
+    high = np.max(similarity)
+    return (mean, low, high)
+
+
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
     def __init__(self, num_decoders, d, f, heads, embedding_matrix):
@@ -18,6 +31,8 @@ class GPTAve(nn.Module):
         self.LayerNormF = LayerNorm(d)
 
     def forward(self, x):
+        # score = compute_similarity(x)
+        # print("(Mean, Low, High) Start: ", score)
         for decoder in self.model:
             x = decoder(x)
             # score = compute_similarity(x)
