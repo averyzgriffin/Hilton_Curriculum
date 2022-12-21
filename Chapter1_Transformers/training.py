@@ -34,7 +34,7 @@ device = torch.device("cuda:0")
 # train = WikiText2(split='train')
 
 max_sequence = 512
-tokenizer = AutoTokenizer.from_pretrained("gpt2")#, model_max_length=max_sequence)
+tokenizer = AutoTokenizer.from_pretrained("gpt2", model_max_length=max_sequence)
 # tokenizer = GPT2TokenizerFast.from_pretrained("gpt2", add_prefix_space=False)#, model_max_length=max_sequence)
 embedding_model = AutoModel.from_pretrained("gpt2")
 # tokenizer.add_special_tokens({'pad_token': '[PAD]'})  # TODO pretty sure this isn't doing anything useful
@@ -42,16 +42,6 @@ embedding_model = AutoModel.from_pretrained("gpt2")
 embedding_matrix = torch.tensor(embedding_model.wte.weight).to(device)
 pipe = pipeline('feature-extraction', model=embedding_model, tokenizer=tokenizer,
                 padding=True, truncation=True)
-
-tokens = tokenizer(text)
-ids = tokens["input_ids"]
-
-
-# tokens = tokenizer.tokenize(train)
-# sequences = [tokens[i:i+max_sequence] for i in range(0, len(tokens), max_sequence)]
-# for seq in sequences:
-#     input_ids = torch.tensor([tokenizer.encode(seq, is_split_into_words=True)])
-#     x = embedding_model(input_ids)
 
 pos_matrix = getPositionEncoding(max_sequence, embedding_model.embed_dim)  # we are just computing this once now
 
