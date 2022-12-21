@@ -15,11 +15,14 @@ class GPTAve(nn.Module):
         self.heads = heads
         self.embedding_matrix = embedding_matrix
         self.model = self.build_model()
+        self.LayerNormF = LayerNorm(d)
 
     def forward(self, x):
         for decoder in self.model:
             x = decoder(x)
-        x = self.compute_logits(x)
+            # score = compute_similarity(x)
+            # print(f"(Mean, Low, High) After Decoder {i}: ", score)
+        x = self.compute_logits(self.LayerNormF(x))
         return x
 
     def build_model(self):
@@ -39,16 +42,12 @@ class Decoder(nn.Module):
 
         self.attention_block = Attention(d, f, heads)  # result is lxf
         self.feedforward_block = FeedForward(d, f)  # result is lxd I think
-        self.LayerNorm1 = nn.LayerNorm(f)  # TODO I might need l here
-        self.LayerNorm2 = nn.LayerNorm(d)
+        self.LayerNorm1 = LayerNorm(f)  # TODO I might need l here
+        self.LayerNorm2 = LayerNorm(d)
 
     def forward(self, x: torch.Tensor):
-        residuals = x.detach().clone()
-        x = self.attention_block(x)
-        x = self.LayerNorm1(x + residuals)
-        residuals = x.detach().clone()
-        x = self.feedforward_block(x)
-        x = self.LayerNorm2(x + residuals)
+        x = x + self.attention_block(self.LayerNorm1(x))  # Normalize before the attention
+        x = x + self.feedforward_block(self.LayerNorm2(x))  # Normalize before the FF
         return x
 
 
@@ -125,6 +124,17 @@ class FeedForward(nn.Module):
         return x
 
 
+class LayerNorm(nn.Module):
+    def __init__(self, features, eps=1e-6):
+        super(LayerNorm, self).__init__()
+        self.a_2 = nn.Parameter(torch.ones(features))
+        self.b_2 = nn.Parameter(torch.zeros(features))
+        self.eps = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 
 
 
