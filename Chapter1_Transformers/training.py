@@ -63,7 +63,8 @@ for p in model.parameters():
 
 print(model)
 loss_fc = torch.nn.CrossEntropyLoss()
-opt = torch.optim.Adam(lr=1e-5, params=model.parameters())
+# opt = torch.optim.Adam(lr=.000001, params=model.parameters())
+opt = get_std_opt(model)  # Taken from Annotated Transformer
 
 # Use this if not using pipeline / want uniform sample sizes
 tokens = tokenizer(text)
