@@ -29,7 +29,6 @@ def get_label(text, tokenizer, max_sequence):
 with open("corpuses/raw_text.txt", "r") as f:
     text = f.read()
 
-
 device = torch.device("cuda:0")
 
 # train = WikiText2(split='train')
