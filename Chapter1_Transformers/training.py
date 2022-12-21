@@ -66,18 +66,47 @@ random.shuffle(sequences)
 s = 0
 # for text in train:
 for seq in sequences:
-    x = preprocess_text2(seq, embedding_model, pos_matrix).to(device)
+    # Old Block
+    # x = preprocess_text2(seq, embedding_model, pos_matrix).to(device)
+    # # x = preprocess_text(text, pipe, pos_matrix).to(device)
+    # # if len(x) > 1:
+    # y = torch.tensor(seq[1:]).to(device)
+    # # y = get_label(text, tokenizer, max_sequence).to(device)
+    # opt.zero_grad()  # clears gradients
+    # logits = model(x)
+    # loss = loss_fc(logits, y)
+    # loss.backward()  # compute gradients
+    # opt.step()  # update weights
+    # print(f"Step {s} Loss {loss}")
+    # s += 1
+
     # x = preprocess_text(text, pipe, pos_matrix).to(device)
-    # if len(x) > 1:
-    y = torch.tensor(seq[1:]).to(device)
-    # y = get_label(text, tokenizer, max_sequence).to(device)
-    opt.zero_grad()  # clears gradients
-    logits = model(x)
-    loss = loss_fc(logits, y)
-    loss.backward()  # compute gradients
-    opt.step()  # update weights
-    print(f"Step {s} Loss {loss}")
-    s += 1
+    x = preprocess_text2(seq, embedding_model, pos_matrix).to(device)  # For when we are not using pipeline
+    # if (s+1) % 16 == 0:
+    #     opt.step()  # update weights
+    #     opt.optimizer.zero_grad()  # clears gradients
+    if len(x) > 1:
+        # y = get_label(text, tokenizer, max_sequence).to(device)  # Pipeline
+        y = torch.tensor(seq[1:]).to(device)  # Not using pipeline
+        # y = torch.ones((len(x)), dtype=int).to(device) * 13  # Label is just all ones
+        # y = torch.tensor(seq[:-1]).to(device)  # Label is just the sequence shifted up one
+        decoded_labels = [tokenizer.decode(y[i]) for i in range(len(y))]
+        opt.optimizer.zero_grad()  # clears gradients
+        logits = model(x)
+        predictions = [torch.argmax(logits[i]).detach().tolist() for i in range(len(logits))]
+        decoded_predictions = [tokenizer.decode(predictions[i]) for i in range(len(predictions))]
+        loss = loss_fc(logits, y)
+        loss.backward()  # compute gradients
+        opt.step()  # update weights
+
+        print(f"\nStep {s} Loss {loss} LR {opt._rate}")
+        # print("Tokens    ", tokenizer.tokenize(text[:30]))
+        print("Tokens    ", tokenizer.decode(seq[:30]))
+        print(f"Labels Ids     {y.detach().tolist()[:15]}")
+        print(f"Label Tokens       {decoded_labels[:15]}")
+        print(f"Prediction Ids {predictions[:15]}")
+        print(f"Prediction Tokens  {decoded_predictions[:15]}")
+        s += 1
 
 
 
