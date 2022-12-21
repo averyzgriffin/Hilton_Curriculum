@@ -54,8 +54,13 @@ ids = tokens["input_ids"]
 
 pos_matrix = getPositionEncoding(max_sequence, embedding_model.embed_dim)  # we are just computing this once now
 
-model = GPTAve(num_decoders=3, d=embedding_model.embed_dim, f=embedding_model.embed_dim,
-               heads=12, embedding_matrix=embedding_matrix).to(device)
+model = GPTAve(num_decoders=4, d=embedding_model.embed_dim, f=embedding_model.embed_dim,
+               heads=8, embedding_matrix=embedding_matrix).to(device)
+
+for p in model.parameters():
+        if p.dim() > 1:
+            torch.nn.init.xavier_uniform_(p)
+
 print(model)
 loss_fc = torch.nn.CrossEntropyLoss()
 opt = torch.optim.Adam(lr=1e-5, params=model.parameters())
