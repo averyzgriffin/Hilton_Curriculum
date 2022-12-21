@@ -60,8 +60,14 @@ print(model)
 loss_fc = torch.nn.CrossEntropyLoss()
 opt = torch.optim.Adam(lr=1e-5, params=model.parameters())
 
-s = 0
+# Use this if not using pipeline / want uniform sample sizes
+tokens = tokenizer(text)
+ids = tokens["input_ids"]
 sequences = [ids[i:i+max_sequence] for i in range(0, len(ids), max_sequence)]
+random.shuffle(sequences)
+
+s = 0
+# for text in train:
 for seq in sequences:
     x = preprocess_text2(seq, embedding_model, pos_matrix).to(device)
     # x = preprocess_text(text, pipe, pos_matrix).to(device)
