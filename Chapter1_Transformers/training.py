@@ -4,6 +4,7 @@ from transformers import AutoTokenizer, AutoModel, pipeline, GPT2TokenizerFast
 from pos_encode import getPositionEncoding
 
 from models import GPTAve
+from helpers import NoamOpt, get_std_opt
 
 
 def preprocess_text(text, token_pipe: pipeline, pos_matrix):
