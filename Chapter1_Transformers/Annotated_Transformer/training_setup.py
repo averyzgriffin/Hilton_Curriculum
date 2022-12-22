@@ -156,22 +156,6 @@ class LabelSmoothing(nn.Module):
         return self.criterion(x, true_dist.clone().detach())
 
 
-def loss(x, crit):
-    d = x + 3 * 1
-    predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d]])
-    return crit(predict.log(), torch.LongTensor([1])).data
-
-
-def data_gen(V, batch_size, nbatches):
-    "Generate random data for a src-tgt copy task."
-    for i in range(nbatches):
-        data = torch.randint(1, V, size=(batch_size, 10))
-        data[:, 0] = 1
-        src = data.requires_grad_(False).clone().detach()
-        tgt = data.requires_grad_(False).clone().detach()
-        yield Batch(src, tgt, 0)
-
-
 class SimpleLossCompute:
     "A simple loss compute and train function."
 
@@ -188,22 +172,6 @@ class SimpleLossCompute:
             / norm
         )
         return sloss.data * norm, sloss
-
-
-def greedy_decode(model, src, src_mask, max_len, start_symbol):
-    memory = model.encode(src, src_mask)
-    ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
-    for i in range(max_len - 1):
-        out = model.decode(
-            memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-        )
-        prob = model.generator(out[:, -1])
-        _, next_word = torch.max(prob, dim=1)
-        next_word = next_word.data[0]
-        ys = torch.cat(
-            [ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1
-        )
-    return ys
 
 
 class DummyOptimizer(torch.optim.Optimizer):

@@ -49,7 +49,11 @@ class EncoderDecoder(nn.Module):
 
 class Generator(nn.Module):
     "Define standard linear + softmax generation step."
-
+    # TODO So they call this proj but it is not the same variable as what I called proj
+    # I belive proj is just the final projection of X into the vocab.
+    # I was using something like this before but switched to using the actual embedding
+    # Bc I think that's what the papers claim: torch.matmul(x, self.embedding_matrix.T)
+    # TODO I don't know which one is correct or if it even matters. Maybe both?
     def __init__(self, d_model, vocab):
         super(Generator, self).__init__()
         self.proj = nn.Linear(d_model, vocab)
@@ -185,6 +189,10 @@ class MultiHeadedAttention(nn.Module):
         # We assume d_v always equals d_k
         self.d_k = d_model // h
         self.h = h
+        # TODO My guess is that this is what I called "proj_z".
+        #  That is, the projections following each attention block.
+        #  But why 4? I'd expect 1 for decoder only models and only
+        #  3 for the full transformer.
         self.linears = clones(nn.Linear(d_model, d_model), 4)
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
@@ -271,20 +279,21 @@ class PositionalEncoding(nn.Module):
 def make_model(
     src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
 ):
-    """
-    Helper: Construct a model from hyperparameters.
+    """ Helper: Construct a model from hyperparameters.
     src_vocab = # of words in the vocabulary that is being encoded from
     tgt_vocab = # of words in the vocabulary that is being decoded into
-    for example, I think gpt has src=tgt=52k
+        For example, I think gpt has src=tgt=52k
+        Notice the only layers to use these are the embeddings and generator.
+    N = # of encoders/decoders to stack. e.g. 12
     """
     c = copy.deepcopy
-    attn = MultiHeadedAttention(h, d_model)
-    ff = PositionwiseFeedForward(d_model, d_ff, dropout)
-    position = PositionalEncoding(d_model, dropout)
+    attn = MultiHeadedAttention(h, d_model)  # TODO had some questions on this one
+    ff = PositionwiseFeedForward(d_model, d_ff, dropout)  # This one looks straight foward
+    position = PositionalEncoding(d_model, dropout)  # TODO Can only assume this is equivalent
     model = EncoderDecoder(
         Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
         Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-        nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
+        nn.Sequential(Embeddings(d_model, src_vocab), c(position)),  # TODO Don't quite understand how these are being inserted in
         nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
         Generator(d_model, tgt_vocab),
     )
