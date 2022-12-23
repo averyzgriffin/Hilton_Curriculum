@@ -5,21 +5,6 @@ import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
 import math
 import copy
-# import time
-# from torch.optim.lr_scheduler import LambdaLR
-# import pandas as pd
-# import altair as alt
-# from torchtext.data.functional import to_map_style_dataset
-# from torch.utils.data import DataLoader
-# from torchtext.vocab import build_vocab_from_iterator
-# import torchtext.datasets as datasets
-# import spacy
-# #import GPUtil
-# import warnings
-# from torch.utils.data.distributed import DistributedSampler
-# import torch.distributed as dist
-# import torch.multiprocessing as mp
-# from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 class EncoderDecoder(nn.Module):
@@ -45,6 +30,26 @@ class EncoderDecoder(nn.Module):
 
     def decode(self, memory, src_mask, tgt, tgt_mask):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
+
+
+class DecoderDecoder(nn.Module):
+    """
+    A standard Decoder architecture like GPT. Base for this and many
+    other models.
+    """
+
+    def __init__(self, decoder, tgt_embed, generator):
+        super(DecoderDecoder, self).__init__()
+        self.decoder = decoder
+        self.tgt_embed = tgt_embed
+        self.generator = generator
+
+    def forward(self, tgt,  tgt_mask):
+        "Take in and process masked src and target sequences."
+        return self.decode(tgt, tgt_mask)
+
+    def decode(self, tgt, tgt_mask):
+        return self.decoder(self.tgt_embed(tgt), tgt_mask)
 
 
 class Generator(nn.Module):
@@ -149,6 +154,20 @@ class Decoder(nn.Module):
         return self.norm(x)
 
 
+class DecoderGPT(nn.Module):
+    "Generic N layer decoder with masking."
+
+    def __init__(self, layer, N):
+        super(DecoderGPT, self).__init__()
+        self.layers = clones(layer, N)
+        self.norm = LayerNorm(layer.size)
+
+    def forward(self, x, tgt_mask):
+        for layer in self.layers:
+            x = layer(x, tgt_mask)
+        return self.norm(x)
+
+
 class DecoderLayer(nn.Module):
     "Decoder is made of self-attn, src-attn, and feed forward (defined below)"
 
@@ -165,6 +184,22 @@ class DecoderLayer(nn.Module):
         m = memory
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
         x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
+        return self.sublayer[2](x, self.feed_forward)
+
+
+class DecoderLayerGPT(nn.Module):
+    "Decoder is made of self-attn, src-attn, and feed forward (defined below)"
+
+    def __init__(self, size, self_attn, feed_forward, dropout):
+        super(DecoderLayerGPT, self).__init__()
+        self.size = size
+        self.self_attn = self_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 3)
+
+    def forward(self, x, tgt_mask):
+        "Follow Figure 1 (right) for connections."
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
         return self.sublayer[2](x, self.feed_forward)
 
 
@@ -294,6 +329,28 @@ def make_model(
         Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
         Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
         nn.Sequential(Embeddings(d_model, src_vocab), c(position)),  # TODO Don't quite understand how these are being inserted in
+        nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
+        Generator(d_model, tgt_vocab),
+    )
+
+    # This was important from their code.
+    # Initialize parameters with Glorot / fan_avg.
+    for p in model.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
+    return model
+
+
+def make_decoder_model(tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
+    """
+    Helper: Construct a model from hyperparameters.
+    """
+    c = copy.deepcopy
+    attn = MultiHeadedAttention(h, d_model)  # TODO had some questions on this one
+    ff = PositionwiseFeedForward(d_model, d_ff, dropout)  # This one looks straight foward
+    position = PositionalEncoding(d_model, dropout)  # TODO Can only assume this is equivalent
+    model = DecoderDecoder(
+        DecoderGPT(DecoderLayerGPT(d_model, c(attn), c(ff), dropout), N),
         nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
         Generator(d_model, tgt_vocab),
     )
