@@ -16,14 +16,16 @@ def load_tokenizers():
     try:
         spacy_de = spacy.load("de_core_news_sm")
     except IOError:
-        os.system("python -m spacy download de_core_news_sm")
-        spacy_de = spacy.load("de_core_news_sm")
+        print("oops")
+        # os.system("python -m spacy download de_core_news_sm")
+        # spacy_de = spacy.load("de_core_news_sm")
 
     try:
         spacy_en = spacy.load("en_core_web_sm")
     except IOError:
-        os.system("python -m spacy download en_core_web_sm")
-        spacy_en = spacy.load("en_core_web_sm")
+        print("oops")
+        # os.system("python -m spacy download en_core_web_sm")
+        # spacy_en = spacy.load("en_core_web_sm")
 
     return spacy_de, spacy_en
 
@@ -32,50 +34,59 @@ def tokenize(text, tokenizer):
     return [tok.text for tok in tokenizer.tokenizer(text)]
 
 
+# TODO Uhhh I don't really get what this is doing
 def yield_tokens(data_iter, tokenizer, index):
     for from_to_tuple in data_iter:
         yield tokenizer(from_to_tuple[index])
 
 
-def build_vocabulary(spacy_de, spacy_en):
-    def tokenize_de(text):
-        return tokenize(text, spacy_de)
+# def build_vocabulary(spacy_de, spacy_en):
+def build_vocabulary(spacy_en):
+    # def tokenize_de(text):
+    #     return tokenize(text, spacy_de)
 
     def tokenize_en(text):
         return tokenize(text, spacy_en)
 
-    print("Building German Vocabulary ...")
-    train, val, test = datasets.Multi30k(language_pair=("de", "en"))
-    vocab_src = build_vocab_from_iterator(
-        yield_tokens(train + val + test, tokenize_de, index=0),
-        min_freq=2,
-        specials=["<s>", "</s>", "<blank>", "<unk>"],
-    )
+    # print("Building German Vocabulary ...")
+    # train, val, test = datasets.Multi30k(language_pair=("de", "en"))
+    # vocab_src = build_vocab_from_iterator(
+    #     yield_tokens(train + val + test, tokenize_de, index=0),
+    #     min_freq=2,
+    #     specials=["<s>", "</s>", "<blank>", "<unk>"],
+    # )
 
     print("Building English Vocabulary ...")
-    train, val, test = datasets.Multi30k(language_pair=("de", "en"))
+    # train, val, test = datasets.Multi30k(language_pair=("de", "en"))
+    train, val, test = datasets.WikiText2()
     vocab_tgt = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_en, index=1),
         min_freq=2,
         specials=["<s>", "</s>", "<blank>", "<unk>"],
     )
 
-    vocab_src.set_default_index(vocab_src["<unk>"])
+    # vocab_src.set_default_index(vocab_src["<unk>"])
     vocab_tgt.set_default_index(vocab_tgt["<unk>"])
 
-    return vocab_src, vocab_tgt
+    # return vocab_src, vocab_tgt
+    return vocab_tgt
 
 
-def load_vocab(spacy_de, spacy_en):
+# def load_vocab(spacy_de, spacy_en):
+def load_vocab(spacy_en):
     if not exists("vocab.pt"):
-        vocab_src, vocab_tgt = build_vocabulary(spacy_de, spacy_en)
-        torch.save((vocab_src, vocab_tgt), "vocab.pt")
+        # vocab_src, vocab_tgt = build_vocabulary(spacy_de, spacy_en)
+        vocab_tgt = build_vocabulary(spacy_en)
+        # torch.save((vocab_src, vocab_tgt), "vocab.pt")
+        torch.save(vocab_tgt, "vocab.pt")
     else:
-        vocab_src, vocab_tgt = torch.load("vocab.pt")
+        # vocab_src, vocab_tgt = torch.load("vocab.pt")
+        vocab_tgt = torch.load("vocab.pt")
     print("Finished.\nVocabulary sizes:")
-    print(len(vocab_src))
+    # print(len(vocab_src))
     print(len(vocab_tgt))
-    return vocab_src, vocab_tgt
+    # return vocab_src, vocab_tgt
+    return vocab_tgt
 
 
 # if is_interactive_notebook():
@@ -86,9 +97,9 @@ def load_vocab(spacy_de, spacy_en):
 
 def collate_batch(
     batch,
-    src_pipeline,
+    # src_pipeline,
     tgt_pipeline,
-    src_vocab,
+    # src_vocab,
     tgt_vocab,
     device,
     max_padding=128,
@@ -96,20 +107,22 @@ def collate_batch(
 ):
     bs_id = torch.tensor([0], device=device)  # <s> token id
     eos_id = torch.tensor([1], device=device)  # </s> token id
-    src_list, tgt_list = [], []
-    for (_src, _tgt) in batch:
-        processed_src = torch.cat(
-            [
-                bs_id,
-                torch.tensor(
-                    src_vocab(src_pipeline(_src)),
-                    dtype=torch.int64,
-                    device=device,
-                ),
-                eos_id,
-            ],
-            0,
-        )
+    # src_list, tgt_list = [], []
+    tgt_list = []
+    # for (_src, _tgt) in batch:
+    for _tgt in batch:
+        # processed_src = torch.cat(
+        #     [
+        #         bs_id,
+        #         torch.tensor(
+        #             src_vocab(src_pipeline(_src)),
+        #             dtype=torch.int64,
+        #             device=device,
+        #         ),
+        #         eos_id,
+        #     ],
+        #     0,
+        # )
         processed_tgt = torch.cat(
             [
                 bs_id,
@@ -122,17 +135,17 @@ def collate_batch(
             ],
             0,
         )
-        src_list.append(
-            # warning - overwrites values for negative values of padding - len
-            pad(
-                processed_src,
-                (
-                    0,
-                    max_padding - len(processed_src),
-                ),
-                value=pad_id,
-            )
-        )
+        # src_list.append(
+        #     # warning - overwrites values for negative values of padding - len
+        #     pad(
+        #         processed_src,
+        #         (
+        #             0,
+        #             max_padding - len(processed_src),
+        #         ),
+        #         value=pad_id,
+        #     )
+        # )
         tgt_list.append(
             pad(
                 processed_tgt,
@@ -141,24 +154,25 @@ def collate_batch(
             )
         )
 
-    src = torch.stack(src_list)
+    # src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
-    return (src, tgt)
+    # return (src, tgt)
+    return tgt
 
 
 def create_dataloaders(
     device,
-    vocab_src,
+    # vocab_src,
     vocab_tgt,
-    spacy_de,
+    # spacy_de,
     spacy_en,
     batch_size=12000,
     max_padding=128,
-    is_distributed=True,
+    is_distributed=False,  # I made this false
 ):
-    # def create_dataloaders(batch_size=12000):
-    def tokenize_de(text):
-        return tokenize(text, spacy_de)
+    ## def create_dataloaders(batch_size=12000):
+    # def tokenize_de(text):
+    #     return tokenize(text, spacy_de)
 
     def tokenize_en(text):
         return tokenize(text, spacy_en)
@@ -166,18 +180,19 @@ def create_dataloaders(
     def collate_fn(batch):
         return collate_batch(
             batch,
-            tokenize_de,
+            # tokenize_de,
             tokenize_en,
-            vocab_src,
+            # vocab_src,
             vocab_tgt,
             device,
             max_padding=max_padding,
-            pad_id=vocab_src.get_stoi()["<blank>"],
+            # pad_id=vocab_src.get_stoi()["<blank>"],
+            pad_id=vocab_tgt.get_stoi()["<blank>"]
         )
 
-    train_iter, valid_iter, test_iter = datasets.Multi30k(
-        language_pair=("de", "en")
-    )
+    # train_iter, valid_iter, test_iter = datasets.Multi30k(
+    #     language_pair=("de", "en"))
+    train_iter, valid_iter, test_iter = datasets.WikiText2()
 
     train_iter_map = to_map_style_dataset(
         train_iter
