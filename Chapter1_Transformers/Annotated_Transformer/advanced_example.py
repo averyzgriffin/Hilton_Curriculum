@@ -8,17 +8,25 @@ import copy
 import time
 from torch.optim.lr_scheduler import LambdaLR
 
-from model_arch import make_model
-from training_setup import LabelSmoothing, rate,run_epoch,\
-    DummyOptimizer, DummyScheduler, SimpleLossCompute
+from torch.optim.lr_scheduler import LambdaLR
+# import GPUtil
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+from data_loader import create_dataloaders, load_tokenizers, load_vocab
+from model_arch import make_decoder_model
+from training_setup import LabelSmoothing, rate,run_epoch, Batch,\
+    DummyOptimizer, DummyScheduler, SimpleLossCompute, TrainState,\
+    BatchDecoder
 
 
 def train_worker(
     gpu,
     ngpus_per_node,
-    vocab_src,
+    # vocab_src,
     vocab_tgt,
-    spacy_de,
+    # spacy_de,
     spacy_en,
     config,
     is_distributed=False,
@@ -27,8 +35,9 @@ def train_worker(
     torch.cuda.set_device(gpu)
 
     pad_idx = vocab_tgt["<blank>"]
-    d_model = 512
-    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    d_model = 512  # TODO parameter
+    # model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model = make_decoder_model(len(vocab_tgt), N=6, d_model=d_model)
     model.cuda(gpu)
     module = model
     is_main_process = True
@@ -47,9 +56,9 @@ def train_worker(
 
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
-        vocab_src,
+        # vocab_src,
         vocab_tgt,
-        spacy_de,
+        # spacy_de,
         spacy_en,
         batch_size=config["batch_size"] // ngpus_per_node,
         max_padding=config["max_padding"],
@@ -75,7 +84,8 @@ def train_worker(
         model.train()
         print(f"[GPU{gpu}] Epoch {epoch} Training ====", flush=True)
         _, train_state = run_epoch(
-            (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
+            # (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
+            (BatchDecoder(b, pad_idx) for b in train_dataloader),
             model,
             SimpleLossCompute(module.generator, criterion),
             optimizer,
@@ -85,33 +95,35 @@ def train_worker(
             train_state=train_state,
         )
 
-        GPUtil.showUtilization()
+        # GPUtil.showUtilization()
+
         if is_main_process:
             file_path = "%s%.2d.pt" % (config["file_prefix"], epoch)
             torch.save(module.state_dict(), file_path)
         torch.cuda.empty_cache()
 
-        print(f"[GPU{gpu}] Epoch {epoch} Validation ====", flush=True)
         model.eval()
+        print(f"[GPU{gpu}] Epoch {epoch} Validation ====", flush=True)
         sloss = run_epoch(
-            (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
+            # (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
+            (BatchDecoder(b, pad_idx) for b in valid_dataloader),
             model,
             SimpleLossCompute(module.generator, criterion),
             DummyOptimizer(),
             DummyScheduler(),
             mode="eval",
         )
+
         print(sloss)
         torch.cuda.empty_cache()
 
-    if is_main_process:
-        file_path = "%sfinal.pt" % config["file_prefix"]
-        torch.save(module.state_dict(), file_path)
+    # if is_main_process:  TODO add back in later
+    #     file_path = "%sfinal.pt" % config["file_prefix"]
+    #     torch.save(module.state_dict(), file_path)
 
 
-def train_distributed_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
-    from the_annotated_transformer import train_worker
-
+# def train_distributed_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
+def train_distributed_model(vocab_tgt, spacy_en, config):
     ngpus = torch.cuda.device_count()
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12356"
@@ -120,22 +132,26 @@ def train_distributed_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     mp.spawn(
         train_worker,
         nprocs=ngpus,
-        args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, config, True),
+        # args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, config, True),
+        args=(ngpus, vocab_tgt, spacy_en, config, True),
     )
 
 
-def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
+# def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
+def train_model(vocab_tgt, spacy_en, config):
     if config["distributed"]:
         train_distributed_model(
-            vocab_src, vocab_tgt, spacy_de, spacy_en, config
+            # vocab_src, vocab_tgt, spacy_de, spacy_en, config
+            vocab_tgt, spacy_en, config
         )
     else:
-      train_worker(
-            0, 1, vocab_src, vocab_tgt, spacy_de, spacy_en, config, False
+        train_worker(
+            # 0, 1, vocab_src, vocab_tgt, spacy_de, spacy_en, config, False
+            0, 1, vocab_tgt, spacy_en, config, False
         )
 
 
-def load_trained_model():
+def load_trained_model(spacy_en, vocab_tgt):
     config = {
         "batch_size": 32,
         "distributed": False,
@@ -144,26 +160,25 @@ def load_trained_model():
         "base_lr": 1.0,
         "max_padding": 72,
         "warmup": 3000,
-        "file_prefix": "multi30k_model_",
+        "file_prefix": "GPTAve_model_",
     }
-    model_path = "multi30k_model_final.pt"
+    model_path = "GPTAve_model_final.pt"
     if not exists(model_path):
-        train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
+        # train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
+        train_model(vocab_tgt, spacy_en, config)
 
-    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load("multi30k_model_final.pt"))
+    # model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model = make_decoder_model(len(vocab_tgt), N=6)
+    model.load_state_dict(torch.load("GPTAve_model_final.pt"))  # TODO Saving
     return model
 
 
-if is_interactive_notebook():
-    model = load_trained_model()
-
-
-
-
-
 if __name__ == "__main__":
-    example_simple_model()
+    spacy_de, spacy_en = load_tokenizers()
+    # vocab_src, vocab_tgt = load_vocab(spacy_de, spacy_en)
+    vocab_tgt = load_vocab(spacy_en)
+
+    load_trained_model(spacy_en, vocab_tgt)
 
 
 
