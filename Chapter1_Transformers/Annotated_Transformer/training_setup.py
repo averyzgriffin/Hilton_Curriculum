@@ -45,6 +45,23 @@ class Batch:
         return tgt_mask
 
 
+class BatchDecoder:
+    def __init__(self, tgt, pad=2):  # 2 = <blank>
+        self.tgt = tgt[:, :-1]
+        self.tgt_y = tgt[:, 1:]
+        self.tgt_mask = self.make_std_mask(self.tgt, pad)
+        self.ntokens = (self.tgt_y != pad).data.sum()
+
+    @staticmethod
+    def make_std_mask(tgt, pad):
+        "Create a mask to hide padding and future words."
+        tgt_mask = (tgt != pad).unsqueeze(-2)
+        tgt_mask = tgt_mask & subsequent_mask(tgt.size(-1)).type_as(
+            tgt_mask.data
+        )
+        return tgt_mask
+
+
 # Keep this out of the class
 def subsequent_mask(size):
     "Mask out subsequent positions."
@@ -82,15 +99,15 @@ def run_epoch(
     tokens = 0
     n_accum = 0
     for i, batch in enumerate(data_iter):
-        out = model.forward(
-            batch.src, batch.tgt, batch.src_mask, batch.tgt_mask
-        )
+        # out = model.forward(
+        #     batch.src, batch.tgt, batch.src_mask, batch.tgt_mask)
+        out = model.forward(batch.tgt, batch.tgt_mask)
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
-        # loss_node = loss_node / accum_iter
+        ## loss_node = loss_node / accum_iter
         if mode == "train" or mode == "train+log":
             loss_node.backward()
             train_state.step += 1
-            train_state.samples += batch.src.shape[0]
+            train_state.samples += batch.tgt.shape[0]  # TODO not sure what this does
             train_state.tokens += batch.ntokens
             if i % accum_iter == 0:
                 optimizer.step()
@@ -105,13 +122,16 @@ def run_epoch(
         if i % 40 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
-            print(
-                (
-                    "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
-                    + "| Tokens / Sec: %7.1f | Learning Rate: %6.1e"
-                )
-#                 % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
-            )
+            print(f"Epoch Step: {i} | Accumulation Step: {n_accum} | "
+                  f"Loss: {loss / batch.ntokens} | Tokens/Sec: {tokens / elapsed} "
+                  f"| Learning Rate:{lr}")
+            # print(
+            #     (
+            #         "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
+            #         + "| Tokens / Sec: %7.1f | Learning Rate: %6.1e"
+            #     )
+            #     % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
+            # )
             start = time.time()
             tokens = 0
         del loss
