@@ -7,23 +7,10 @@ import math
 import copy
 import time
 from torch.optim.lr_scheduler import LambdaLR
-# import pandas as pd
-# import altair as alt
-# from torchtext.data.functional import to_map_style_dataset
-# from torch.utils.data import DataLoader
-# from torchtext.vocab import build_vocab_from_iterator
-# import torchtext.datasets as datasets
-# import spacy
-# #import GPUtil
-# import warnings
-# from torch.utils.data.distributed import DistributedSampler
-# import torch.distributed as dist
-# import torch.multiprocessing as mp
-# from torch.nn.parallel import DistributedDataParallel as DDP
 
 from model_arch import make_model
-from training_setup import LabelSmoothing, rate, run_epoch, data_gen,\
-    SimpleLossCompute, greedy_decode, DummyOptimizer, DummyScheduler
+from training_setup import LabelSmoothing, rate,\
+    run_epoch, DummyOptimizer, DummyScheduler, SimpleLossCompute
 
 
 # Simple copy task: given an input of token, spit out the same tokens
@@ -69,6 +56,31 @@ def example_simple_model():
     src_mask = torch.ones(1, 1, max_len)
     print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
 
+
+def data_gen(V, batch_size, nbatches):
+    "Generate random data for a src-tgt copy task."
+    for i in range(nbatches):
+        data = torch.randint(1, V, size=(batch_size, 10))
+        data[:, 0] = 1
+        src = data.requires_grad_(False).clone().detach()
+        tgt = data.requires_grad_(False).clone().detach()
+        yield Batch(src, tgt, 0)
+
+
+def greedy_decode(model, src, src_mask, max_len, start_symbol):
+    memory = model.encode(src, src_mask)
+    ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len - 1):
+        out = model.decode(
+            memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
+        )
+        prob = model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat(
+            [ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1
+        )
+    return ys
 
 
 if __name__ == "__main__":
