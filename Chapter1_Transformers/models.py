@@ -1,3 +1,5 @@
+import copy
+import math
 import torch
 import torch.nn as nn
 import numpy as np
@@ -6,7 +8,7 @@ from torch.nn.functional import softmax, log_softmax
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
 class GPTAve(nn.Module):
-    def __init__(self, num_decoders, d, f, heads, embedding_matrix):
+    def __init__(self, num_decoders, d, f, heads, generator=None, embedding=None, embedding_matrix=None):
         super(GPTAve, self).__init__()
 
         self.num_decoders = num_decoders
@@ -16,14 +18,14 @@ class GPTAve(nn.Module):
         self.embedding_matrix = embedding_matrix
         self.model = self.build_model()
         self.LayerNormF = LayerNorm(d)
+        # self.embedding = Embeddings(d, len(embedding_matrix))
+        # self.generator = nn.Linear(f, len(embedding_matrix))
 
     def forward(self, x):
-        # score = compute_similarity(x)
-        # print("(Mean, Low, High) Start: ", score)
+        # x = self.embedding(x).squeeze()
         for decoder in self.model:
             x = decoder(x)
-            # score = compute_similarity(x)
-            # print(f"(Mean, Low, High) After Decoder {i}: ", score)
+        # x = self.generator(self.LayerNormF(x))
         x = self.compute_logits(self.LayerNormF(x))
         return x
 
@@ -140,6 +142,81 @@ class LayerNorm(nn.Module):
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 
 
+def compute_similarity(array: torch.Tensor):
+    cos = nn.CosineSimilarity(dim=0)
+    similarity = []
+    for x in range(len(array)):
+        for y in range(len(array)):
+            if x != y:
+                similarity.append(cos(array[x], array[y]).cpu().detach())
+    mean = np.mean(similarity)
+    low = np.min(similarity)
+    high = np.max(similarity)
+    return mean, low, high
 
 
+# Annotated Transformer Code
+class Generator(nn.Module):
+    "Define standard linear + softmax generation step."
+    def __init__(self, d_model, vocab):
+        super(Generator, self).__init__()
+        self.proj = nn.Linear(d_model, vocab)
 
+    def forward(self, x):
+        return log_softmax(self.proj(x), dim=-1)
+
+
+class Embeddings(nn.Module):
+    def __init__(self, d_model, vocab):
+        super(Embeddings, self).__init__()
+        self.lut = nn.Embedding(vocab, d_model)
+        self.d_model = d_model
+
+    def forward(self, x):
+        return self.lut(x) * math.sqrt(self.d_model)
+
+
+class PositionalEncoding(nn.Module):
+    "Implement the PE function."
+
+    def __init__(self, d_model, dropout, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, : x.size(1)].requires_grad_(False)
+        return self.dropout(x)
+
+
+def make_gpt(tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
+    """
+    Helper: Construct a model from hyperparameters. This is used for the Annotated Transformer example.
+    """
+    c = copy.deepcopy
+    # attn = MultiHeadedAttention(h, d_model)  # TODO had some questions on this one
+    # ff = PositionwiseFeedForward(d_model, d_ff, dropout)  # This one looks straight foward
+    position = PositionalEncoding(d_model, dropout)  # TODO Can only assume this is equivalent
+    model = GPTAve(num_decoders=N, d=d_model, f=d_model, heads=h,
+                   generator=Generator(d_model, tgt_vocab),
+                   embedding=nn.Sequential(Embeddings(d_model, tgt_vocab), c(position))
+    )
+
+    # This was important from their code.
+    # Initialize parameters with Glorot / fan_avg.
+    for p in model.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
+
+    return model
+# Annotated Transformer Code
