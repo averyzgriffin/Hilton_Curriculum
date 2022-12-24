@@ -1,12 +1,6 @@
 import os
 from os.path import exists
 import torch
-import torch.nn as nn
-from torch.nn.functional import log_softmax, pad
-import math
-import copy
-import time
-from torch.optim.lr_scheduler import LambdaLR
 
 from torch.optim.lr_scheduler import LambdaLR
 # import GPUtil
@@ -14,6 +8,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from Chapter1_Transformers.models import make_gpt
 from data_loader import create_dataloaders, load_tokenizers, load_vocab
 from model_arch import make_decoder_model
 from training_setup import LabelSmoothing, rate,run_epoch, Batch,\
@@ -37,7 +32,8 @@ def train_worker(
     pad_idx = vocab_tgt["<blank>"]
     d_model = 512  # TODO parameter
     # model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model = make_decoder_model(len(vocab_tgt), N=6, d_model=d_model)
+    # model = make_decoder_model(len(vocab_tgt), N=6, d_model=d_model)
+    model = make_gpt(len(vocab_tgt), N=6, d_model=d_model, h=8)
     model.cuda(gpu)
     module = model
     is_main_process = True
@@ -168,7 +164,8 @@ def load_trained_model(spacy_en, vocab_tgt):
         train_model(vocab_tgt, spacy_en, config)
 
     # model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model = make_decoder_model(len(vocab_tgt), N=6)
+    # model = make_decoder_model(len(vocab_tgt), N=6)
+    model = make_gpt(len(vocab_tgt), N=6, d_model=512, h=8)
     model.load_state_dict(torch.load("GPTAve_model_final.pt"))  # TODO Saving
     return model
 
