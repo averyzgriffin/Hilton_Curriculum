@@ -101,7 +101,8 @@ def run_epoch(
     for i, batch in enumerate(data_iter):
         # out = model.forward(
         #     batch.src, batch.tgt, batch.src_mask, batch.tgt_mask)
-        out = model.forward(batch.tgt, batch.tgt_mask)
+        # out = model.forward(batch.tgt, batch.tgt_mask)
+        out = model.forward(batch.tgt).unsqueeze(0)  # TODO use this one for GPTAve
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         ## loss_node = loss_node / accum_iter
         if mode == "train" or mode == "train+log":
