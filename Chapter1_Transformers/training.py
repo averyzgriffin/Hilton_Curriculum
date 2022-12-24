@@ -34,6 +34,7 @@ device = torch.device("cuda:0")
 # train = WikiText2(split='train')
 
 max_sequence = 512
+batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained("gpt2", model_max_length=max_sequence)
 # tokenizer = GPT2TokenizerFast.from_pretrained("gpt2", add_prefix_space=False)#, model_max_length=max_sequence)
 embedding_model = AutoModel.from_pretrained("gpt2")
@@ -63,6 +64,7 @@ ids = tokens["input_ids"]
 sequences = [ids[i:i+max_sequence] for i in range(0, len(ids), max_sequence)]
 random.shuffle(sequences)
 
+torch.cuda.empty_cache()
 s = 0
 # for text in train:
 for seq in sequences:
@@ -82,22 +84,22 @@ for seq in sequences:
 
     # x = preprocess_text(text, pipe, pos_matrix).to(device)
     x = preprocess_text2(seq, embedding_model, pos_matrix).to(device)  # For when we are not using pipeline
-    # if (s+1) % 16 == 0:
-    #     opt.step()  # update weights
-    #     opt.optimizer.zero_grad()  # clears gradients
+    if (s+1) % batch_size == 0:
+        opt.step()  # update weights
+        opt.optimizer.zero_grad()  # clears gradients
     if len(x) > 1:
         # y = get_label(text, tokenizer, max_sequence).to(device)  # Pipeline
         y = torch.tensor(seq[1:]).to(device)  # Not using pipeline
         # y = torch.ones((len(x)), dtype=int).to(device) * 13  # Label is just all ones
         # y = torch.tensor(seq[:-1]).to(device)  # Label is just the sequence shifted up one
         decoded_labels = [tokenizer.decode(y[i]) for i in range(len(y))]
-        opt.optimizer.zero_grad()  # clears gradients
+        # opt.optimizer.zero_grad()  # clears gradients
         logits = model(x)
         predictions = [torch.argmax(logits[i]).detach().tolist() for i in range(len(logits))]
         decoded_predictions = [tokenizer.decode(predictions[i]) for i in range(len(predictions))]
         loss = loss_fc(logits, y)
         loss.backward()  # compute gradients
-        opt.step()  # update weights
+        # opt.step()  # update weights
 
         print(f"\nStep {s} Loss {loss} LR {opt._rate}")
         # print("Tokens    ", tokenizer.tokenize(text[:30]))
