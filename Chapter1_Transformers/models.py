@@ -1,20 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.nn.functional import softmax
-
-
-def compute_similarity(array: torch.Tensor):
-    cos = nn.CosineSimilarity(dim=0)
-    similarity = []
-    for x in range(len(array)):
-        for y in range(len(array)):
-            if x != y:
-                similarity.append(cos(array[x], array[y]).cpu().detach())
-    mean = np.mean(similarity)
-    low = np.min(similarity)
-    high = np.max(similarity)
-    return mean, low, high
+from torch.nn.functional import softmax, log_softmax
 
 
 # Reminder f and d are probably going to be equivalent for me (ignoring heads for now)
@@ -48,7 +35,8 @@ class GPTAve(nn.Module):
 
     def compute_logits(self, x):
         x = torch.matmul(x, self.embedding_matrix.T)
-        return softmax(x, dim=1)
+        # return softmax(x, dim=1)
+        return log_softmax(x, dim=1)
 
 
 class Decoder(nn.Module):
